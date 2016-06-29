@@ -26,7 +26,7 @@ tags = ["Plugin", "", ""]
 categories = ["Survey"]
 +++
 
-Go is a statically compiled language. No dynamic libraries can be loaded at runtime, nor does the runtime support compiling Go on the fly. Still, there is a number of ways of creating and using plugins in Go.
+Go is a statically compiled language. The Go runtime cannot load dynamic libraries, nor does it support compiling Go on the fly. Still, there is a number of ways of creating and using plugins in Go.
 
 <!--more-->
 
@@ -90,7 +90,7 @@ This is perhaps the most straightforward approach:
 * Main process and plugin process are connected via stdin and stdout
 * Main process uses RPC ([Remote Procedure Call](https://en.wikipedia.org/wiki/Remote_procedure_call) via stdin/stdout connection
 
-#### Source/Example
+#### Example
 
 The blog post [Go Plugins are as Easy as Pie](http://npf.io/2015/05/pie/) introduced this concept to Go in May 2015. The accompanying `pie` package is [here](https://github.com/natefinch/pie), and if you ask me, this could be my favorite plugin approach just for the yummy pumpkin pie picture in the readme!
 
@@ -101,7 +101,7 @@ The blog post [Go Plugins are as Easy as Pie](http://npf.io/2015/05/pie/) introd
 
 The main difference to the previous approach is the way how the RPC calls are implemented. Rather than using the stdin/stdout connection, the RPC calls can also be done via the (local) network.
 
-#### Source/Example
+#### Example
 
 The package [`go-plugin`](https://github.com/hashicorp/go-plugin) by Hashicorp utilizes `net/rpc` for connecting to the plugin processes. `go-plugin` is a rather heavyweight plugin system with lots of features, clearly able to attract developers of enterprise software who look for a complete and industry tested solution.
 
@@ -112,7 +112,7 @@ The package [`go-plugin`](https://github.com/hashicorp/go-plugin) by Hashicorp u
 
 Message queue systems, especially the brokerless ones, provide a solid groundwork for creating plugin systems. My quick research did not return any MQ-based plugin solution, but this may well be due to the fact that not much is needed to turn a message queue system into a plugin architecture.
 
-#### Source/Example
+#### Example
 
 Remember my first two posts of this blog? I introduced the [nanomsg](http://nanomsg.org/) system and its Go implementation [Mangos](https://github.com/go-mangos/mangos). The nanomsg specification includes a set of predefined communication protocols covering many different scenarios: Pair, PubSub, Bus, Survey, Pipeline, and ReqRep. Some of them come in quite handy for communicating with plugins:
 
@@ -126,22 +126,59 @@ Remember my first two posts of this blog? I introduced the [nanomsg](http://nano
 
 Calling a package a plugin might seem debatable when it is compiled into the main application just like any other package. But as long as there is a plugin API defined that the plugin packages implement, and as long as the build process is able to pick up any plugin that has been added, there is nothing wrong with that.
 
-The advantages of in-process plugins--speed, reliability, ease of use--have been outlined above. As a downside, adding, removing, or updating a plugin requires compling and deploying the whole main application.
+The advantages of in-process plugins--speed, reliability, ease of use--have been outlined above. As a downside, adding, removing, or updating a plugin requires compiling and deploying the whole main application.
 
 
-#### Source/Example
+#### Example
 
-If you know the awesome Web server [Caddy](https://caddyserver.com/), you might already have seen a compile-time plugin system in action. On the donwload page, the first step lets you select from a dozen or so add-ons which get compiled into the caddy binary.
+Technically, any go library package can be a plugin package provided that it adheres to the plugin API that you have defined for your project.
+
+Maybe the most common type of compile-time plugin is HTTP middleware. Go's [`net/http`](https://golang.org/pkg/net/http/) makes it super easy to plug in new handlers to an HTTP server:
+
+* Write a package containing either one or more functions that implement the `Handler` interface, or functions with the signature `func(w http.ResponseWriter, r *http.Request)`.
+* Import the package into your application.
+* Call `http.Handle(<pattern>, <yourpkg.yourhandler>)` or `http.HandleFunc(<pattern>, <yourpkg.yourhandlefunc>)`, respectively, to register a handler.
+
+Needless to say that this pattern can be used for any kind of plugin; the concept is not specific to HTTP handlers.
 
 
-### Script plugins via scripting API
+### Script plugins: In-process but not compiled
 
-* Lua
-* http://awesome-go.com/#embeddable-scripting-languages
+#### Description
+
+Script plugin mechanisms provide an interesting middle ground between in-process and out-of-process plugin approaches. The plugin is written in a scripting language whose interpreter is compiled into your application. With this technique it is possible to load an in-process plugin at runtime--with the small caveat that the plugin is not native code but must be interpreted. Expect most of these approaches to have a rather low performance.
+
+#### Example
+
+The page "Awesome-go.com" [lists a couple of embeddable scripting languages for Go](http://awesome-go.com/#embeddable-scripting-languages). Be aware that some of them include an interpreter while others only accept pre-compiled byte code.
+
+Just to list a few here:
+
+* [Agora](https://github.com/PuerkitoBio/agora) is a scripting language with Go-like syntax.
+* [GopherLua](https://github.com/yuin/gopher-lua) is an interpreter for the [Lua](https://www.lua.org/) scripting language.
+* [Otto](https://github.com/robertkrimen/otto) is a JavaScript interpreter.
 
 
-## The code
+## Conclusion
+
+The lack of shared, run-time loadable libraries did not stop the Go community from creating and using plugins. There are a number of different approaches to choose from, each one serving particular requirements.
+
+Until Go supports creating and using shared libraries (and rumors about this appear to have been around since Go 1.4
+
+## A small plugin playground
+
 */
 
 // ## Imports and globals
 package main
+
+/*
+import (
+	"github.com/natefinch/pie"
+	"github.com/hashicorp/go-plugin"
+	"github.com/go-mangos/mangos"
+	"github.com/go-mangos/mangos/protocol/rep"
+	"github.com/go-mangos/mangos/protocol/req"
+	"github.com/go-mangos/mangos/transport/ipc"
+)
+*/
