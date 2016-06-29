@@ -30,14 +30,6 @@ Go is a statically compiled language. The Go runtime cannot load dynamic librari
 
 <!--more-->
 
-To avoid misunderstandings: Go *can* produce dynamic libraries. However, these have a C-style API and therefore can only be used by languages other than Go, as long as these languages have shared library support. This way you can, for example, write a Go plugin for Python.
-
-Since Go 1.5 it is also possible to compile shared libraries that can be linked at compile time.
-
-Go also can link C-style libraries into the executable.
-
-However, what is missing (as per Go 1.6) is a way to dynamically load a Go shared library at runtime.
-
 ## The case for plugins in Go
 
 Plugins are useful for extending an application's feature list - but in Go, compiling a whole app from source is fast and easy, so why should anyone bother with plugins in Go?
