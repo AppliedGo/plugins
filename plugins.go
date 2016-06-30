@@ -76,11 +76,13 @@ Both approaches have advantages and disadvantages, and as we'll see, one approac
 
 With these feature lists in mind, let's look at a couple of different plugin solutions for the Go language.
 
+
 ## Plugin approaches in Go
 
 As mentioned before, Go lacks an option for loading shared libraries at runtime, and so a variety of alternate approaches have been created. Here are the ones I could find through two quick searches on GitHub and on Google, in no particular order:
 
-### External process with RPC via stdin/stdout
+
+### External process using RPC via stdin/stdout
 
 #### Description
 
@@ -92,10 +94,23 @@ This is perhaps the most straightforward approach:
 
 #### Example
 
-The blog post [Go Plugins are as Easy as Pie](http://npf.io/2015/05/pie/) introduced this concept to Go in May 2015. The accompanying `pie` package is [here](https://github.com/natefinch/pie), and if you ask me, this could be my favorite plugin approach just for the yummy pumpkin pie picture in the readme!
+The blog post [Go Plugins are as Easy as Pie](http://npf.io/2015/05/pie/) introduced this concept to Go in May 2015. The accompanying `pie` package is [here](https://github.com/natefinch/pie), and if you ask me, this could be my favorite plugin approach just for the yummy pumpkin pie picture in the readme! (Spoiler picture below.)
+
+<a title="By Evan-Amos (Own work) [CC BY-SA 3.0 (http://creativecommons.org/licenses/by-sa/3.0)], via Wikimedia Commons" href="https://commons.wikimedia.org/wiki/File%3APumpkin-Pie-Slice.jpg"><img width="50%" alt="Pumpkin-Pie-Slice" src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/84/Pumpkin-Pie-Slice.jpg/512px-Pumpkin-Pie-Slice.jpg"/></a>
+
+And this is basically how Pie starts a plugin and communicates with it:
+
+![Pie plugin diagram](pie.svg)
+
+In Pie, a plugin can take one of two roles.
+
+* As a Provider, it responds to requests from the main program.
+* As a Consumer, it can actively call into the main program and receive the results.
 
 
-### External process with RPC via network
+
+
+### External process using RPC via network
 
 #### Description
 
@@ -103,7 +118,9 @@ The main difference to the previous approach is the way how the RPC calls are im
 
 #### Example
 
-The package [`go-plugin`](https://github.com/hashicorp/go-plugin) by Hashicorp utilizes `net/rpc` for connecting to the plugin processes. `go-plugin` is a rather heavyweight plugin system with lots of features, clearly able to attract developers of enterprise software who look for a complete and industry tested solution.
+The package [`go-plugin`](https://github.com/hashicorp/go-plugin) by HashiCorp utilizes `net/rpc` for connecting to the plugin processes. `go-plugin` is a rather heavyweight plugin system with lots of features, clearly able to attract developers of enterprise software who look for a complete and industry tested solution.
+
+![go-plugin diagram](go-plugin.svg)
 
 
 ### External process via message queue
@@ -114,11 +131,12 @@ Message queue systems, especially the brokerless ones, provide a solid groundwor
 
 #### Example
 
-Remember my first two posts of this blog? I introduced the [nanomsg](http://nanomsg.org/) system and its Go implementation [Mangos](https://github.com/go-mangos/mangos). The nanomsg specification includes a set of predefined communication protocols covering many different scenarios: Pair, PubSub, Bus, Survey, Pipeline, and ReqRep. Some of them come in quite handy for communicating with plugins:
+I did not find any message queue based plugin systems, but maybe you remember the [first post](https://appliedgo.net/messaging) of this blog, where I introduced the [nanomsg](http://nanomsg.org/) system and its Go implementation [Mangos](https://github.com/go-mangos/mangos). The nanomsg specification includes a set of predefined communication topologies (called "scalability protocols" in nanomsg jargon) covering many different scenarios: Pair, PubSub, Bus, Survey, Pipeline, and ReqRep. Two of them come in quite handy for communicating with plugins.
 
-* The ReqRep (Request-Reply) protocol can be used for mimicking RPC calls to a particular plugin. It is not the real RPC thing, however, as the sockets handle plain `[]byte` data only. So the main process and the plugins must take care of serializing and de-serializing the request and reply data.
+* The ReqRep (or Request-Reply) protocol can be used for mimicking RPC calls to a particular plugin. It is not the real RPC thing, however, as the sockets handle plain `[]byte` data only. So the main process and the plugins must take care of serializing and de-serializing the request and reply data.
 * The Survey protocol helps monitoring the status of all plugins at once. The main process sends a survey to all plugins, and the plugins respond if they can. If a plugin does not respond within the deadline, the main process can take measures to restart the plugin.
-*
+
+![MQ based plugin](mq-plugin.svg)
 
 ### In-process plugins, included at compile time
 
@@ -127,7 +145,6 @@ Remember my first two posts of this blog? I introduced the [nanomsg](http://nano
 Calling a package a plugin might seem debatable when it is compiled into the main application just like any other package. But as long as there is a plugin API defined that the plugin packages implement, and as long as the build process is able to pick up any plugin that has been added, there is nothing wrong with that.
 
 The advantages of in-process plugins--speed, reliability, ease of use--have been outlined above. As a downside, adding, removing, or updating a plugin requires compiling and deploying the whole main application.
-
 
 #### Example
 
@@ -138,6 +155,8 @@ Maybe the most common type of compile-time plugin is HTTP middleware. Go's [`net
 * Write a package containing either one or more functions that implement the `Handler` interface, or functions with the signature `func(w http.ResponseWriter, r *http.Request)`.
 * Import the package into your application.
 * Call `http.Handle(<pattern>, <yourpkg.yourhandler>)` or `http.HandleFunc(<pattern>, <yourpkg.yourhandlefunc>)`, respectively, to register a handler.
+
+![in-process plugin](in-process.svg)
 
 Needless to say that this pattern can be used for any kind of plugin; the concept is not specific to HTTP handlers.
 
@@ -158,6 +177,8 @@ Just to list a few here:
 * [GopherLua](https://github.com/yuin/gopher-lua) is an interpreter for the [Lua](https://www.lua.org/) scripting language.
 * [Otto](https://github.com/robertkrimen/otto) is a JavaScript interpreter.
 
+![Script Plugin](script-plugin.svg)
+
 
 ## Conclusion
 
@@ -165,20 +186,121 @@ The lack of shared, run-time loadable libraries did not stop the Go community fr
 
 Until Go supports creating and using shared libraries (and rumors about this appear to have been around since Go 1.4
 
-## A small plugin playground
+
+## A simple(-minded) plugin concept
+
+All of the examples listed above have very good documentation and/or examples available. I therefore refrain from repeating the code here; instead, let me try building the simplest plugin concept EVER! :)
+
+The concept builds upon bare net.rpc.
 
 */
 
 // ## Imports and globals
 package main
 
-/*
 import (
-	"github.com/natefinch/pie"
-	"github.com/hashicorp/go-plugin"
-	"github.com/go-mangos/mangos"
-	"github.com/go-mangos/mangos/protocol/rep"
-	"github.com/go-mangos/mangos/protocol/req"
-	"github.com/go-mangos/mangos/transport/ipc"
+	"errors"
+	"fmt"
+	"io"
+	"log"
+	"os"
+	"os/exec"
 )
-*/
+
+// app is the main application. It starts a plugin, sends a string
+// (the "function call") and prints out the plugin's answer.
+func app() {
+
+	// Get the plugin.
+	plugin := exec.Command("./plugins", "isPlugin")
+
+	// Start the plugin.
+	err := plugin.Start()
+	if err != nil {
+		log.Fatal("Cannot start ", plugin.Path)
+	}
+
+	// Get the stdin and stdout pipes of the plugin.
+	request, err := plugin.StdinPipe()
+	if err != nil {
+		log.Fatal("Cannot open stdin of ", plugin.Path)
+	}
+
+	response, err := plugin.StdoutPipe()
+	if err != nil {
+		log.Fatal("Cannot open stdout of ", plugin.Path)
+	}
+
+	// Call the plugin.
+	_, err = request.Write([]byte("Hello\n)"))
+	if err != nil {
+		log.Fatal("Cannot write to ", plugin.Path)
+	}
+
+	// Read the response.
+	var p []byte
+	_, err = response.Read(p)
+	if err != nil {
+		log.Fatal("Cannot read from ", plugin.Path)
+	}
+	fmt.Println(p)
+
+	// Make another call.
+	_, err = request.Write([]byte("1+1\n"))
+	if err != nil {
+		log.Fatal("Cannot write to ", plugin.Path)
+	}
+
+	// Get the result.
+	_, err = response.Read(p)
+	if err != nil {
+		log.Fatal("Cannot read from ", plugin.Path)
+	}
+	fmt.Println(p)
+
+	// Terminate the plugin.
+	request.Close()
+	err = plugin.Wait()
+	if err != nil {
+		log.Fatal("Cannot wait for ", plugin.Path)
+	}
+}
+
+func plgin() {
+	err := errors.New("")
+	for {
+		var p []byte
+		_, err = os.Stdin.Read(p)
+		if err != nil {
+			break
+		}
+		switch string(p) {
+		case "Hello":
+			_, err = fmt.Println("Hello from the plugin")
+			if err != nil {
+				break
+			}
+		case "1+1":
+			_, err = fmt.Println("2")
+			if err != nil {
+				break
+			}
+		default:
+			_, err = fmt.Println("Unknown request")
+			if err != nil {
+				break
+			}
+		}
+	}
+	if err != io.EOF {
+		log.Fatal("Plugin error: ", err)
+	}
+}
+
+func main() {
+	if len(os.Args) > 1 && os.Args[1] == "isPlugin" {
+		plgin()
+	} else {
+		app()
+	}
+}
