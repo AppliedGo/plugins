@@ -195,112 +195,169 @@ The concept builds upon bare net.rpc.
 
 */
 
-// ## Imports and globals
+// ### Imports and globals
 package main
 
 import (
-	"errors"
 	"fmt"
-	"io"
 	"log"
+	"net"
+	"net/rpc"
 	"os"
 	"os/exec"
+	"strings"
+	"time"
 )
 
-// app is the main application. It starts a plugin, sends a string
-// (the "function call") and prints out the plugin's answer.
-func app() {
+// ### The plugin
+//
+// `Plugin` is the type that we register with `net/rpc`. The RPC client can
+// then call Plugin's methods.
+type Plugin struct{}
 
-	// Get the plugin.
-	plugin := exec.Command("./plugins", "isPlugin")
-
-	// Start the plugin.
-	err := plugin.Start()
-	if err != nil {
-		log.Fatal("Cannot start ", plugin.Path)
+// `Revert` returns the input string reverted.
+//
+// All methods callable via RPC must satisfy these conditions:
+// - exported method of exported type
+// - two arguments, both of exported type
+// - the second argument is a pointer
+// - one return value, of type error
+func (p Plugin) Revert(arg []byte, ret *[]byte) error {
+	fmt.Println("Plugin: revert")
+	l := len(arg) - 1
+	for i := 0; i < l/2; i++ {
+		arg[i], arg[l-i] = arg[l-i], arg[i]
 	}
-
-	// Get the stdin and stdout pipes of the plugin.
-	request, err := plugin.StdinPipe()
-	if err != nil {
-		log.Fatal("Cannot open stdin of ", plugin.Path)
-	}
-
-	response, err := plugin.StdoutPipe()
-	if err != nil {
-		log.Fatal("Cannot open stdout of ", plugin.Path)
-	}
-
-	// Call the plugin.
-	_, err = request.Write([]byte("Hello\n)"))
-	if err != nil {
-		log.Fatal("Cannot write to ", plugin.Path)
-	}
-
-	// Read the response.
-	var p []byte
-	_, err = response.Read(p)
-	if err != nil {
-		log.Fatal("Cannot read from ", plugin.Path)
-	}
-	fmt.Println(p)
-
-	// Make another call.
-	_, err = request.Write([]byte("1+1\n"))
-	if err != nil {
-		log.Fatal("Cannot write to ", plugin.Path)
-	}
-
-	// Get the result.
-	_, err = response.Read(p)
-	if err != nil {
-		log.Fatal("Cannot read from ", plugin.Path)
-	}
-	fmt.Println(p)
-
-	// Terminate the plugin.
-	request.Close()
-	err = plugin.Wait()
-	if err != nil {
-		log.Fatal("Cannot wait for ", plugin.Path)
-	}
+	ret = &arg
+	return nil
 }
 
-func plgin() {
-	err := errors.New("")
-	for {
-		var p []byte
-		_, err = os.Stdin.Read(p)
-		if err != nil {
+// `Shout` returns the input string after making it uppercase.
+func (p Plugin) Shout(arg string, ret *string) error {
+	fmt.Println("Plugin: shout")
+	upper := strings.ToUpper(arg)
+	ret = &upper
+	return nil
+}
+
+// `Exit` terminates the plugin process.
+// `arg` and `ret` are only dummy parameters, to satisfy the
+// function signature.
+func (p Plugin) Exit(arg int, ret *int) error {
+	fmt.Println("Plugin: done.")
+	os.Exit(0)
+	return nil
+}
+
+// `start` starts the plugin server.
+func startPlugin() {
+	fmt.Println("Plugin start")
+
+	// register the Plugin type with RPC.
+	p := &Plugin{}
+	err := rpc.Register(p)
+	if err != nil {
+		log.Fatal("Cannot register plugin: ", err)
+	}
+
+	fmt.Println("Plugin: starting listener")
+	// Start the listener.
+	listener, err := net.Listen("tcp", "127.0.0.1:55555")
+	if err != nil {
+		log.Fatal("Cannot listen: ", err)
+	}
+	// Start serving requests to the default server.
+	fmt.Println("Plugin: accepting requests")
+	rpc.Accept(listener)
+}
+
+// ### The main application
+
+// `repeat` attempts to call function `f` at most `n` times,
+// pausing for one second after each unsuccessful attempt.
+// This is used for connecting to the plugin after starting the plugin process.
+func repeat(n int, f func() (*rpc.Client, error)) (c *rpc.Client, err error) {
+	for i := 0; i < n; i++ {
+		c, err = f()
+		if err == nil {
 			break
 		}
-		switch string(p) {
-		case "Hello":
-			_, err = fmt.Println("Hello from the plugin")
-			if err != nil {
-				break
-			}
-		case "1+1":
-			_, err = fmt.Println("2")
-			if err != nil {
-				break
-			}
-		default:
-			_, err = fmt.Println("Unknown request")
-			if err != nil {
-				break
-			}
-		}
+		time.Sleep(1 * time.Second)
 	}
-	if err != io.EOF {
-		log.Fatal("Plugin error: ", err)
+	return c, err
+}
+
+// `app` is our main application. It starts the plugin process
+// and calls `Shout()` via RPC.
+func app() {
+	fmt.Println("App start")
+	// Get the plugin.
+	p := exec.Command("./plugins", "true")
+	p.Stdout = os.Stdout
+	p.Stderr = os.Stderr
+
+	// Start the plugin process.
+	err := p.Start()
+	if err != nil {
+		log.Fatal("Cannot start ", p.Path, ": ", err)
 	}
+
+	fmt.Println("App: registering RPC client")
+	// Create and register the RPC client.
+	client, err := repeat(5, func() (*rpc.Client, error) {
+		client, err := rpc.Dial("tcp", "127.0.0.1:55555")
+		return client, err
+	})
+	if err != nil {
+		log.Fatal("Cannot create RPC client: ", err)
+	}
+
+	// Call the two methods.
+	fmt.Println("App: calling the plugin methods")
+
+	revert := []byte{}
+	err = client.Call("Plugin.Revert", []byte("Live on time, emit no evil"), &revert)
+	if err != nil {
+		log.Fatal("Error calling Revert: ", err)
+	}
+	fmt.Println("App: revert result: ", revert)
+
+	shout := ""
+	err = client.Call("Plugin.Shout", "What's that?!", &shout)
+	if err != nil {
+		log.Fatal("Error calling Shout: ", err)
+	}
+	fmt.Println("App: shout result: ", shout)
+
+	// Stop the plugin and terminate the app.
+	fmt.Println("App: stopping the plugin")
+	var n int
+	client.Call("Plugin.Exit", 0, &n)
+	err = p.Wait()
+	if err != nil {
+		log.Fatal("Cannot wait for ", p.Path, ": ", err)
+	}
+	fmt.Println("App: done.")
 }
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "isPlugin" {
-		plgin()
+
+	// Start either as plugin or as main app.
+	if len(os.Args) > 1 {
+		// Create the plugin struct and register it with RPC.
+		startPlugin()
 	} else {
 		app()
 	}
 }
+
+/*
+As always, get the code with `go get -d` to avoid that the binary to show up in your $GOPATH/bin.
+
+	go get -d github.com/appliedgo/plugins
+	cd $GOPATH/src/github.com/appliedgo/plugins
+	go build
+	./plugins
+
+Enjoy!
+*/
