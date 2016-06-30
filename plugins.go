@@ -22,7 +22,7 @@ email = "chris@appliedgo.net"
 date = "2016-06-30"
 publishdate = "2016-06-30"
 domains = ["Architecture"]
-tags = ["Plugin", "", ""]
+tags = ["Plugin", "RPC", "in-process", "out-of-process"]
 categories = ["Survey"]
 +++
 
