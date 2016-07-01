@@ -240,7 +240,7 @@ func (p Plugin) Revert(arg string, ret *string) error {
 // function signature.
 func (p Plugin) Exit(arg int, ret *int) error {
 	fmt.Println("Plugin: done.")
-	time.AfterFunc(time.Second, func() { os.Exit(0) }) // using os.Exit here is suitable for demo code only.
+	os.Exit(0) // using os.Exit here is suitable for demo code only.
 	return nil
 }
 
@@ -307,14 +307,8 @@ func app() {
 	// Stop the plugin and terminate the app.
 	fmt.Println("App: stopping the plugin")
 	var n int
-	err = client.Call("Plugin.Exit", 0, &n)
-	if err != nil {
-		log.Fatal("Cannot close the connection: ", err)
-	}
-	err = p.Wait()
-	if err != nil {
-		log.Fatal("Cannot wait for termination of", p.Path, ": ", err)
-	}
+	client.Call("Plugin.Exit", 0, &n)
+	p.Wait()
 	fmt.Println("App: done.")
 }
 
