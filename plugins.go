@@ -189,9 +189,7 @@ Until Go supports creating and using shared libraries (and rumors about this app
 
 ## A simple(-minded) plugin concept
 
-All of the examples listed above have very good documentation and/or examples available. I therefore refrain from repeating the code here; instead, let me try building the simplest plugin concept EVER! :)
-
-The concept builds upon bare net.rpc.
+All of the examples listed above have very good documentation and/or examples available. I therefore refrain from repeating the code here; instead, let's go through building a very simple (simplistic?) plugin concept based upon bare `net/rpc`.
 
 */
 
@@ -209,8 +207,10 @@ import (
 	"time"
 )
 
-// ### The plugin
-//
+/*
+### The plugin
+*/
+
 // `Plugin` is the type that we register with `net/rpc`. The RPC client can
 // then call Plugin's methods.
 type Plugin struct{}
@@ -279,21 +279,9 @@ func startPlugin() {
 	rpc.Accept(listener)
 }
 
-// ### The main application
-
-// `repeat` attempts to call function `f` at most `n` times,
-// pausing for one second after each unsuccessful attempt.
-// This is used for connecting to the plugin after starting the plugin process.
-func repeat(n int, f func() (*rpc.Client, error)) (c *rpc.Client, err error) {
-	for i := 0; i < n; i++ {
-		c, err = f()
-		if err == nil {
-			break
-		}
-		time.Sleep(1 * time.Second)
-	}
-	return c, err
-}
+/*
+### The main application
+*/
 
 // `app` is our main application. It starts the plugin process
 // and calls `Shout()` via RPC.
@@ -310,12 +298,10 @@ func app() {
 		log.Fatal("Cannot start ", p.Path, ": ", err)
 	}
 
+	// Create the RPC client.
 	fmt.Println("App: registering RPC client")
-	// Create and register the RPC client.
-	client, err := repeat(5, func() (*rpc.Client, error) {
-		client, err := rpc.Dial("tcp", "127.0.0.1:55555")
-		return client, err
-	})
+
+	client, err := rpc.DialTimeout("tcp", "127.0.0.1:55555", 5*time.Second)
 	if err != nil {
 		log.Fatal("Cannot create RPC client: ", err)
 	}
@@ -323,14 +309,14 @@ func app() {
 	// Call the two methods.
 	fmt.Println("App: calling the plugin methods")
 
-	var revert Byte // We need the struct here, rather than plain []byte
+	var revert Byte // We need the struct here. rpc.Call cannot handle a plain []byte type (nor string).
 	err = client.Call("Plugin.Revert", []byte("Live on time, emit no evil"), &revert)
 	if err != nil {
 		log.Fatal("Error calling Revert: ", err)
 	}
 	fmt.Println("App: revert result:", string(revert.B))
 
-	var shout Str // Here, too, we need a struct
+	var shout Str // Here, too, we need a struct, for the same reason as with revert.
 	err = client.Call("Plugin.Shout", "What's that?!", &shout)
 	if err != nil {
 		log.Fatal("Error calling Shout: ", err)
