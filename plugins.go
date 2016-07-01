@@ -96,7 +96,7 @@ This is perhaps the most straightforward approach:
 
 The blog post [Go Plugins are as Easy as Pie](http://npf.io/2015/05/pie/) introduced this concept to Go in May 2015. The accompanying `pie` package is [here](https://github.com/natefinch/pie), and if you ask me, this could be my favorite plugin approach just for the yummy pumpkin pie picture in the readme! (Spoiler picture below.)
 
-<a title="By Evan-Amos (Own work) [CC BY-SA 3.0 (http://creativecommons.org/licenses/by-sa/3.0)], via Wikimedia Commons" href="https://commons.wikimedia.org/wiki/File%3APumpkin-Pie-Slice.jpg"><img width="50%" alt="Pumpkin-Pie-Slice" src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/84/Pumpkin-Pie-Slice.jpg/512px-Pumpkin-Pie-Slice.jpg"/></a>
+<a title="By Evan-Amos (Own work) [CC BY-SA 3.0 (http://creativecommons.org/licenses/by-sa/3.0)], via Wikimedia Commons" href="https://commons.wikimedia.org/wiki/File%3APumpkin-Pie-Slice.jpg"><img width="10%" alt="Pumpkin-Pie-Slice" src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/84/Pumpkin-Pie-Slice.jpg/512px-Pumpkin-Pie-Slice.jpg"/></a>
 
 And this is basically how Pie starts a plugin and communicates with it:
 
@@ -189,11 +189,13 @@ Until Go supports creating and using shared libraries (and rumors about this app
 
 ## A simple(-minded) plugin concept
 
-All of the examples listed above have very good documentation and/or examples available. I therefore refrain from repeating the code here; instead, let's go through building a very simple (simplistic?) plugin concept based upon bare `net/rpc`.
+All of the examples listed above have very good documentation and/or examples available. I therefore refrain from repeating the code here; instead, let's go through building a very simple plugin concept based upon bare `net/rpc`.
+
+If you are not familiar with RPC in Go, you will want to keep the [documentation](https://golang.org/pkg/net/rpc/) of the `net/rpc` package at hand while reading through the code.
 
 */
 
-// ### Imports and globals
+// ### Imports
 package main
 
 import (
@@ -203,48 +205,33 @@ import (
 	"net/rpc"
 	"os"
 	"os/exec"
-	"strings"
 	"time"
 )
 
-/*
-### The plugin
-*/
+// ### The plugin
 
 // `Plugin` is the type that we register with `net/rpc`. The RPC client can
 // then call Plugin's methods.
-type Plugin struct{}
-
-// Seems the response parameter of `rpc.Call` needs to be a struct when
-// the actual data is a `string` or `[]byte`.
-type Str struct {
-	S string
-}
-type Byte struct {
-	B []byte
+type Plugin struct {
+	listener net.Listener
 }
 
 // `Revert` returns the input string reverted.
 //
 // All methods callable via RPC must satisfy these conditions:
-// - exported method of exported type
-// - two arguments, both of exported type
-// - the second argument is a pointer
-// - one return value, of type error
-func (p Plugin) Revert(arg []byte, ret *Byte) error {
+//
+// * exported method of exported type
+// * two arguments, both of exported or built-in type
+// * the second argument is a pointer
+// * one return value, of type error
+func (p Plugin) Revert(arg string, ret *string) error {
 	fmt.Println("Plugin: revert")
-	ret.B = arg
-	l := len(ret.B) - 1
-	for i := 0; i < l/2; i++ {
-		ret.B[i], ret.B[l-i] = ret.B[l-i], ret.B[i]
+	l := len(arg)
+	r := make([]byte, l)
+	for i := 0; i < l; i++ {
+		r[i] = arg[l-1-i]
 	}
-	return nil
-}
-
-// `Shout` returns the input string after making it uppercase.
-func (p Plugin) Shout(arg string, ret *Str) error {
-	fmt.Println("Plugin: shout")
-	ret.S = strings.ToUpper(arg)
+	*ret = string(r)
 	return nil
 }
 
@@ -253,7 +240,7 @@ func (p Plugin) Shout(arg string, ret *Str) error {
 // function signature.
 func (p Plugin) Exit(arg int, ret *int) error {
 	fmt.Println("Plugin: done.")
-	os.Exit(0)
+	time.AfterFunc(time.Second, func() { os.Exit(0) }) // using os.Exit here is suitable for demo code only.
 	return nil
 }
 
@@ -270,18 +257,16 @@ func startPlugin() {
 
 	fmt.Println("Plugin: starting listener")
 	// Start the listener.
-	listener, err := net.Listen("tcp", "127.0.0.1:55555")
+	p.listener, err = net.Listen("tcp", "127.0.0.1:55555")
 	if err != nil {
 		log.Fatal("Cannot listen: ", err)
 	}
 	// Start serving requests to the default server.
 	fmt.Println("Plugin: accepting requests")
-	rpc.Accept(listener)
+	rpc.Accept(p.listener)
 }
 
-/*
-### The main application
-*/
+// ### The main application
 
 // `app` is our main application. It starts the plugin process
 // and calls `Shout()` via RPC.
@@ -297,42 +282,43 @@ func app() {
 	if err != nil {
 		log.Fatal("Cannot start ", p.Path, ": ", err)
 	}
+	// Ensure the plugin process is up and running before attempting to connect.
+	// `net/rpc` has no `DialTimeout` method (unlike `net`).
+	time.Sleep(1 * time.Second)
 
 	// Create the RPC client.
 	fmt.Println("App: registering RPC client")
 
-	client, err := rpc.DialTimeout("tcp", "127.0.0.1:55555", 5*time.Second)
+	client, err := rpc.Dial("tcp", "127.0.0.1:55555")
 	if err != nil {
 		log.Fatal("Cannot create RPC client: ", err)
 	}
 
-	// Call the two methods.
-	fmt.Println("App: calling the plugin methods")
+	// Call the Revert method.
+	fmt.Println("App: calling Revert")
 
-	var revert Byte // We need the struct here. rpc.Call cannot handle a plain []byte type (nor string).
-	err = client.Call("Plugin.Revert", []byte("Live on time, emit no evil"), &revert)
+	var reverse string
+	err = client.Call("Plugin.Revert", "Live on time, emit no evil", &reverse)
 	if err != nil {
 		log.Fatal("Error calling Revert: ", err)
 	}
-	fmt.Println("App: revert result:", string(revert.B))
-
-	var shout Str // Here, too, we need a struct, for the same reason as with revert.
-	err = client.Call("Plugin.Shout", "What's that?!", &shout)
-	if err != nil {
-		log.Fatal("Error calling Shout: ", err)
-	}
-	fmt.Println("App: shout result:", shout.S)
+	fmt.Println("App: revert result:", reverse)
 
 	// Stop the plugin and terminate the app.
 	fmt.Println("App: stopping the plugin")
 	var n int
-	client.Call("Plugin.Exit", 0, &n)
+	err = client.Call("Plugin.Exit", 0, &n)
+	if err != nil {
+		log.Fatal("Cannot close the connection: ", err)
+	}
 	err = p.Wait()
 	if err != nil {
-		log.Fatal("Cannot wait for ", p.Path, ": ", err)
+		log.Fatal("Cannot wait for termination of", p.Path, ": ", err)
 	}
 	fmt.Println("App: done.")
 }
+
+// ## main()
 
 func main() {
 
