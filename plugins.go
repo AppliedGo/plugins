@@ -215,6 +215,15 @@ import (
 // then call Plugin's methods.
 type Plugin struct{}
 
+// Seems the response parameter of `rpc.Call` needs to be a struct when
+// the actual data is a `string` or `[]byte`.
+type Str struct {
+	S string
+}
+type Byte struct {
+	B []byte
+}
+
 // `Revert` returns the input string reverted.
 //
 // All methods callable via RPC must satisfy these conditions:
@@ -222,21 +231,20 @@ type Plugin struct{}
 // - two arguments, both of exported type
 // - the second argument is a pointer
 // - one return value, of type error
-func (p Plugin) Revert(arg []byte, ret *[]byte) error {
+func (p Plugin) Revert(arg []byte, ret *Byte) error {
 	fmt.Println("Plugin: revert")
-	l := len(arg) - 1
+	ret.B = arg
+	l := len(ret.B) - 1
 	for i := 0; i < l/2; i++ {
-		arg[i], arg[l-i] = arg[l-i], arg[i]
+		ret.B[i], ret.B[l-i] = ret.B[l-i], ret.B[i]
 	}
-	ret = &arg
 	return nil
 }
 
 // `Shout` returns the input string after making it uppercase.
-func (p Plugin) Shout(arg string, ret *string) error {
+func (p Plugin) Shout(arg string, ret *Str) error {
 	fmt.Println("Plugin: shout")
-	upper := strings.ToUpper(arg)
-	ret = &upper
+	ret.S = strings.ToUpper(arg)
 	return nil
 }
 
@@ -315,19 +323,19 @@ func app() {
 	// Call the two methods.
 	fmt.Println("App: calling the plugin methods")
 
-	revert := []byte{}
+	var revert Byte // We need the struct here, rather than plain []byte
 	err = client.Call("Plugin.Revert", []byte("Live on time, emit no evil"), &revert)
 	if err != nil {
 		log.Fatal("Error calling Revert: ", err)
 	}
-	fmt.Println("App: revert result: ", revert)
+	fmt.Println("App: revert result:", string(revert.B))
 
-	shout := ""
+	var shout Str // Here, too, we need a struct
 	err = client.Call("Plugin.Shout", "What's that?!", &shout)
 	if err != nil {
 		log.Fatal("Error calling Shout: ", err)
 	}
-	fmt.Println("App: shout result: ", shout)
+	fmt.Println("App: shout result:", shout.S)
 
 	// Stop the plugin and terminate the app.
 	fmt.Println("App: stopping the plugin")
@@ -343,10 +351,17 @@ func app() {
 func main() {
 
 	// Start either as plugin or as main app.
-	if len(os.Args) > 1 {
+	if len(os.Args) > 1 && os.Args[1] == "true" {
 		// Create the plugin struct and register it with RPC.
 		startPlugin()
+		// Exit after 10 seconds, in case the main app stopped
+		// without terminating the plugin.
+		time.AfterFunc(10*time.Second, func() {
+			fmt.Println("Plugin: idle timeout - exiting")
+			return
+		})
 	} else {
+		// Start the main application.
 		app()
 	}
 }
