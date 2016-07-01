@@ -30,6 +30,9 @@ Go is a statically compiled language. The Go runtime cannot load dynamic librari
 
 <!--more-->
 
+![Low Tech Plugins](bits.jpg)
+
+
 ## The case for plugins in Go
 
 Plugins are useful for extending an application's feature list - but in Go, compiling a whole app from source is fast and easy, so why should anyone bother with plugins in Go?
@@ -189,7 +192,7 @@ Until Go supports creating and using shared libraries (and rumors about this app
 
 ## A simple(-minded) plugin concept
 
-All of the examples listed above have very good documentation and/or examples available. I therefore refrain from repeating the code here; instead, let's go through building a very simple plugin concept based upon bare `net/rpc`.
+All of the examples listed above have very good documentation and/or examples available. I refrain from repeating any code here and take a bare-bone approach instead, based upon `net/rpc` (and a bit of `os/exec`).
 
 If you are not familiar with RPC in Go, you will want to keep the [documentation](https://golang.org/pkg/net/rpc/) of the `net/rpc` package at hand while reading through the code.
 
