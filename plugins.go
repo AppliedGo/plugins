@@ -93,7 +93,7 @@ This is perhaps the most straightforward approach:
 
 * Main process starts plugin process
 * Main process and plugin process are connected via stdin and stdout
-* Main process uses RPC ([Remote Procedure Call](https://en.wikipedia.org/wiki/Remote_procedure_call) via stdin/stdout connection
+* Main process uses RPC ([Remote Procedure Call](https://en.wikipedia.org/wiki/Remote_procedure_call)) via stdin/stdout connection
 
 #### Example
 
