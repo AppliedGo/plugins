@@ -21,9 +21,9 @@ author = "Christoph Berger"
 email = "chris@appliedgo.net"
 date = "2016-06-30"
 publishdate = "2016-06-30"
-domains = ["Architecture"]
+categories = ["Architecture"]
 tags = ["Plugin", "RPC", "in-process", "out-of-process"]
-categories = ["Survey"]
+articletypes = ["Survey"]
 +++
 
 Go is a statically compiled language. The Go runtime cannot load dynamic libraries, nor does it support compiling Go on the fly. Still, there is a number of ways of creating and using plugins in Go.
