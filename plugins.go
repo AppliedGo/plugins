@@ -134,7 +134,7 @@ Message queue systems, especially the brokerless ones, provide a solid groundwor
 
 #### Example
 
-I did not find any message queue based plugin systems, but maybe you remember the [first post](https://appliedgo.net/messaging) of this blog, where I introduced the [nanomsg](http://nanomsg.org/) system and its Go implementation [Mangos](https://github.com/go-mangos/mangos). The nanomsg specification includes a set of predefined communication topologies (called "scalability protocols" in nanomsg jargon) covering many different scenarios: Pair, PubSub, Bus, Survey, Pipeline, and ReqRep. Two of them come in quite handy for communicating with plugins.
+I did not find any message queue based plugin systems, but maybe you remember the [first post]({{< ref "/messaging" >}}) of this blog, where I introduced the [nanomsg](http://nanomsg.org/) system and its Go implementation [Mangos](https://github.com/go-mangos/mangos). The nanomsg specification includes a set of predefined communication topologies (called "scalability protocols" in nanomsg jargon) covering many different scenarios: Pair, PubSub, Bus, Survey, Pipeline, and ReqRep. Two of them come in quite handy for communicating with plugins.
 
 * The ReqRep (or Request-Reply) protocol can be used for mimicking RPC calls to a particular plugin. It is not the real RPC thing, however, as the sockets handle plain `[]byte` data only. So the main process and the plugins must take care of serializing and de-serializing the request and reply data.
 * The Survey protocol helps monitoring the status of all plugins at once. The main process sends a survey to all plugins, and the plugins respond if they can. If a plugin does not respond within the deadline, the main process can take measures to restart the plugin.
